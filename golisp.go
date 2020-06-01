@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Read
 
-func Read(str string) (*Node, error) {
-	tokenizer := NewTokenizer(str)
+func Read(str string) (*Cons, error) {
+	tokenizer := NewTokenizer(strings.TrimSuffix(str, " "))
 	tokens, err := tokenizer.Tokenize()
 	if err != nil {
 		return nil, err
@@ -20,6 +21,8 @@ func Read(str string) (*Node, error) {
 	parser := NewParser(tokens)
 	return parser.Parse()
 }
+
+/// tokenize
 
 type TokenType int
 
@@ -100,6 +103,8 @@ func (t *Tokenizer) isDigit() bool {
 	return '0' <= t.input[t.pos] && t.input[t.pos] <= '9'
 }
 
+/// parse
+
 type Parser struct {
 	tokens []*Token
 	pos    int
@@ -109,136 +114,177 @@ func NewParser(toks []*Token) *Parser {
 	return &Parser{tokens: toks}
 }
 
+func (p *Parser) Pos() int {
+	return p.pos
+}
+
 func (p *Parser) current() *Token {
-	return p.tokens[p.pos]
+	return p.tokens[p.Pos()]
+}
+
+func (p *Parser) peek() *Token {
+	return p.tokens[p.Pos()+1]
 }
 
 func (p *Parser) next() {
 	p.pos++
 }
 
-type NodeKind int
+type Cons struct {
+	Car interface{} // Contents of the Address part of the Register
+	Cdr interface{} // Contents of the Decrement part of the Register
+}
+
+type AtomType int
 
 const (
-	ND_NUM NodeKind = iota
-	ND_OP
+	TypeNil AtomType = iota
+	TypeNum
+	TypeOp
 )
 
-type Node struct {
-	Kind NodeKind
+type Atom struct {
+	Kind AtomType
 	Val  interface{}
-	Next *Node
 }
+
+var Nil = Atom{Kind: TypeNil, Val: nil}
 
 // parse = <nil> | node*
-func (p *Parser) Parse() (*Node, error) {
-	head := &Node{}
-	cur := head
+func (p *Parser) Parse() (*Cons, error) {
+	var cur, cons *Cons
 
-	for p.current().Kind != TK_EOF {
-		node := p.readNode()
-		if node != nil {
-			cur.Next = node
-			cur = cur.Next
+	for {
+		if p.current().Kind == TK_EOF || p.current().Kind == TK_RPAREN {
+			break
 		}
-		p.next()
+
+		if cur == nil {
+			cons = &Cons{&Nil, &Nil}
+			cur = cons
+		} else {
+			p := cur
+			cur = &Cons{&Nil, &Nil}
+			p.Cdr = cur
+		}
+
+		switch p.current().Kind {
+		case TK_NUM:
+			cur.Car = &Atom{Kind: TypeNum, Val: p.current().Val}
+			p.next()
+		case TK_OP:
+			cur.Car = &Atom{Kind: TypeOp, Val: p.current().Str}
+			p.next()
+		case TK_LPAREN:
+			p.next()
+			if p.current().Kind == TK_RPAREN {
+				cur.Car = &Nil
+			} else {
+				nested, err := p.Parse()
+				if err != nil {
+					return nil, err
+				}
+				cur.Car = nested
+			}
+			p.next()
+		}
 	}
 
-	return head.Next, nil
+	return cons, nil
 }
 
-// readNode = TK_RPALEN | TK_LPAREN | TK_NUM | TK_OP
-func (p *Parser) readNode() *Node {
-	switch p.current().Kind {
-	case TK_RPAREN:
-		return nil
-	case TK_LPAREN:
-		p.next()
-		return p.readNode()
-	case TK_NUM:
-		return &Node{Kind: ND_NUM, Val: p.current().Val}
-	case TK_OP:
-		return &Node{Kind: ND_OP, Val: p.current().Str}
+func debugCons(cons *Cons) {
+	switch cons.Car.(type) {
+	case *Cons:
+		debugCons(cons.Car.(*Cons))
+	case *Atom:
+		debugAtom(cons.Car.(*Atom))
 	}
 
-	return nil
+	if cons.Cdr != &Nil {
+		switch cons.Cdr.(type) {
+		case *Cons:
+			debugCons(cons.Cdr.(*Cons))
+		case *Atom:
+			debugAtom(cons.Cdr.(*Atom))
+		}
+	}
+}
+
+func debugAtom(atom *Atom) {
+	fmt.Printf("%#v\n", atom)
 }
 
 // Eval
 
-func Eval(node *Node) (*Node, error) {
-	var result *Node
-
-	if node == nil {
-		return nil, nil
+func (c *Cons) Eval() (string, error) {
+	if c == nil {
+		return "", nil
 	}
 
-	switch node.Kind {
-	case ND_NUM:
-		return node, nil
-	case ND_OP:
-		ret, err := calculate(node)
-		if err != nil {
-			return nil, err
+	// _, Nil
+	if c.Cdr == &Nil {
+		switch car := c.Car.(type) {
+		case *Cons:
+			return car.Eval()
+		case *Atom:
+			return car.Eval()
+		default:
+			return "", errors.New("invalid type of car")
 		}
-		result = ret
-	default:
-		result = node
-	}
-	return result, nil
-}
+	} else { // _, Cons
+		switch car := c.Car.(type) {
+		case *Cons:
+			// TODO
+		case *Atom:
+			v, err := car.Eval()
+			if err != nil {
+				return "", err
+			}
 
-func calculate(node *Node) (*Node, error) {
-	op := node.Val.(string)
-	node = node.Next
-	if node == nil || node.Next == nil {
-		return nil, errors.New("invalid number of arguments")
-	}
-
-	cur, err := Eval(node)
-	if err != nil {
-		return nil, err
-	}
-	if cur.Kind != ND_NUM {
-		return nil, errors.New("expected number")
-	}
-
-	next, err := Eval(node.Next)
-	if err != nil {
-		return nil, err
-	}
-
-	switch op {
-	case "+":
-		return &Node{Val: cur.Val.(int) + next.Val.(int)}, nil
-	case "-":
-		return &Node{Val: cur.Val.(int) - next.Val.(int)}, nil
-	case "*":
-		return &Node{Val: cur.Val.(int) * next.Val.(int)}, nil
-	case "/":
-		return &Node{Val: cur.Val.(int) / next.Val.(int)}, nil
-	}
-
-	return nil, errors.New("invalid calculation")
-}
-
-// Print
-
-func Print(node *Node) {
-	printNode(node)
-	fmt.Println()
-}
-
-func printNode(node *Node) {
-	if node == nil {
-		fmt.Printf("<nil>")
-	} else {
-		fmt.Printf("%v ", node.Val)
-		if node.Next != nil {
-			printNode(node.Next)
+			if v == "+" {
+				lhs, err := c.Cdr.(*Cons).Car.(*Atom).Eval()
+				if err != nil {
+					return "", err
+				}
+				lnum, err := strconv.Atoi(lhs)
+				if err != nil {
+					return "", err
+				}
+				rhs, err := c.Cdr.(*Cons).Cdr.(*Cons).Eval()
+				if err != nil {
+					return "", err
+				}
+				rnum, err := strconv.Atoi(rhs)
+				if err != nil {
+					return "", err
+				}
+				return strconv.Itoa(lnum + rnum), nil
+			}
+		default:
+			return "", errors.New("invalid type of car")
 		}
 	}
+
+	return "", nil
 }
+
+func (a *Atom) Eval() (string, error) {
+	if a == &Nil {
+		return "", nil
+	}
+
+	if a.Kind == TypeNum {
+		return strconv.Itoa(a.Val.(int)), nil
+	}
+	if a.Kind == TypeOp {
+		return a.Val.(string), nil
+	}
+
+	return "", nil
+}
+
+// TODO: Print
 
 // Loop
 
@@ -258,13 +304,14 @@ func loop() {
 			continue
 		}
 
-		result, err := Eval(expr)
+		// debugCons(expr)
+
+		out, err := expr.Eval()
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
-
-		Print(result)
+		fmt.Println(out)
 	}
 }
 

@@ -242,24 +242,31 @@ func (c *Cons) Eval() (string, error) {
 				return "", err
 			}
 
-			if v == "+" {
-				lhs, err := c.Cdr.(*Cons).Car.(*Atom).Eval()
+			switch v {
+			case "+":
+				val, err := c.Cdr.(*Cons).evalAdd()
 				if err != nil {
 					return "", err
 				}
-				lnum, err := strconv.Atoi(lhs)
+				return strconv.Itoa(val), nil
+			case "-":
+				val, err := c.Cdr.(*Cons).evalSub()
 				if err != nil {
 					return "", err
 				}
-				rhs, err := c.Cdr.(*Cons).Cdr.(*Cons).Eval()
+				return strconv.Itoa(val), nil
+			case "*":
+				val, err := c.Cdr.(*Cons).evalMul()
 				if err != nil {
 					return "", err
 				}
-				rnum, err := strconv.Atoi(rhs)
+				return strconv.Itoa(val), nil
+			case "/":
+				val, err := c.Cdr.(*Cons).evalDiv()
 				if err != nil {
 					return "", err
 				}
-				return strconv.Itoa(lnum + rnum), nil
+				return strconv.Itoa(val), nil
 			}
 		default:
 			return "", errors.New("invalid type of car")
@@ -267,6 +274,92 @@ func (c *Cons) Eval() (string, error) {
 	}
 
 	return "", nil
+}
+
+func evalTerm(i interface{}) (int, error) {
+	var val int
+
+	switch c := i.(type) {
+	case *Atom:
+		v, err := c.Eval()
+		if err != nil {
+			return 0, err
+		}
+		val, err = strconv.Atoi(v)
+		if err != nil {
+			return 0, err
+		}
+	case *Cons:
+		v, err := c.Eval()
+		if err != nil {
+			return 0, err
+		}
+		val, err = strconv.Atoi(v)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return val, nil
+}
+
+func (c *Cons) evalAdd() (int, error) {
+	lhs, err := evalTerm(c.Car)
+	if err != nil {
+		return 0, err
+	}
+
+	rhs, err := evalTerm(c.Cdr)
+	if err != nil {
+		return 0, err
+	}
+
+	return lhs + rhs, nil
+}
+
+func (c *Cons) evalSub() (int, error) {
+	lhs, err := evalTerm(c.Car)
+	if err != nil {
+		return 0, err
+	}
+
+	rhs, err := evalTerm(c.Cdr)
+	if err != nil {
+		return 0, err
+	}
+
+	return lhs - rhs, nil
+}
+
+func (c *Cons) evalMul() (int, error) {
+	lhs, err := evalTerm(c.Car)
+	if err != nil {
+		return 0, err
+	}
+
+	rhs, err := evalTerm(c.Cdr)
+	if err != nil {
+		return 0, err
+	}
+
+	return lhs * rhs, nil
+}
+
+func (c *Cons) evalDiv() (int, error) {
+	lhs, err := evalTerm(c.Car)
+	if err != nil {
+		return 0, err
+	}
+
+	rhs, err := evalTerm(c.Cdr)
+	if err != nil {
+		return 0, err
+	}
+	if rhs == 0 {
+		return 0, errors.New("could not divide by zero")
+	}
+
+	return lhs / rhs, nil
 }
 
 func (a *Atom) Eval() (string, error) {

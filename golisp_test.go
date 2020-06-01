@@ -31,6 +31,9 @@ func TestEval(t *testing.T) {
 		expected string
 	}{
 		{"", ""},
+		{"(+ 1 1)", "2"},
+		{"(+ 2 (* 3 4))", "14"},
+		{"(- 8 (/ 6 (+ 1 1)))", "5"},
 	}
 
 	for _, tt := range testcases {

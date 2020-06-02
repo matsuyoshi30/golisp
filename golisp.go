@@ -223,7 +223,7 @@ func (c *Cons) Eval() (string, error) {
 		return "", nil
 	}
 
-	// _, Nil
+	// _, Atom (should be &Nil)
 	if c.Cdr == &Nil {
 		switch car := c.Car.(type) {
 		case *Cons:
@@ -236,7 +236,13 @@ func (c *Cons) Eval() (string, error) {
 	} else { // _, Cons
 		switch car := c.Car.(type) {
 		case *Cons:
-			// TODO
+			if v, err := car.Eval(); err != nil {
+				return "", err
+			} else if c.Cdr == &Nil {
+				return v, nil
+			} else {
+				return c.Cdr.(*Cons).Eval()
+			}
 		case *Atom:
 			v, err := car.Eval()
 			if err != nil {

@@ -194,6 +194,7 @@ func (p *Parser) Parse() (*Cons, error) {
 }
 
 func debugCons(cons *Cons) {
+	fmt.Printf("Cons: %#v\n", cons)
 	switch cons.Car.(type) {
 	case *Cons:
 		debugCons(cons.Car.(*Cons))
@@ -212,7 +213,7 @@ func debugCons(cons *Cons) {
 }
 
 func debugAtom(atom *Atom) {
-	fmt.Printf("%#v\n", atom)
+	fmt.Printf("\tAtom: %#v\n", atom)
 }
 
 // Eval

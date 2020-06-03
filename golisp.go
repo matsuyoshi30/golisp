@@ -218,192 +218,205 @@ func debugAtom(atom *Atom) {
 
 // Eval
 
-func (c *Cons) Eval() (string, error) {
+func (c *Cons) Eval() (*Atom, error) {
 	if c == nil {
-		return "", nil
+		return nil, nil
 	}
 
-	// _, Atom (should be &Nil)
-	if c.Cdr == &Nil {
-		switch car := c.Car.(type) {
-		case *Cons:
-			return car.Eval()
-		case *Atom:
-			return car.Eval()
-		default:
-			return "", errors.New("invalid type of car")
+	switch car := c.Car.(type) {
+	case *Cons:
+		if v, err := car.Eval(); err != nil {
+			return nil, err
+		} else if c.Cdr == &Nil {
+			return v, nil
+		} else {
+			return c.Cdr.(*Cons).Eval()
 		}
-	} else { // _, Cons
-		switch car := c.Car.(type) {
-		case *Cons:
-			if v, err := car.Eval(); err != nil {
-				return "", err
-			} else if c.Cdr == &Nil {
+	case *Atom:
+		if v, err := car.Eval(); err != nil {
+			return nil, err
+		} else if cdr, ok := c.Cdr.(*Atom); ok {
+			if cdr == &Nil {
 				return v, nil
 			} else {
-				return c.Cdr.(*Cons).Eval()
+				// TODO: Cons{Atom,Atom} and right Atom is not Nil
 			}
-		case *Atom:
-			v, err := car.Eval()
-			if err != nil {
-				return "", err
+		} else {
+			if str, ok := v.Val.(string); ok {
+				switch str {
+				case "+":
+					val, err := c.Cdr.(*Cons).evalAdd()
+					if err != nil {
+						return nil, err
+					}
+					return val, nil
+				case "-":
+					val, err := c.Cdr.(*Cons).evalSub()
+					if err != nil {
+						return nil, err
+					}
+					return val, nil
+				case "*":
+					val, err := c.Cdr.(*Cons).evalMul()
+					if err != nil {
+						return nil, err
+					}
+					return val, nil
+				case "/":
+					val, err := c.Cdr.(*Cons).evalDiv()
+					if err != nil {
+						return nil, err
+					}
+					return val, nil
+				}
+			} else {
+				var a *Atom
+				if cdr, ok := c.Cdr.(*Cons); ok {
+					a, err = cdr.Eval()
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					return nil, errors.New("should be handle another way")
+				}
+				c := &Cons{&Atom{Kind: TypeNum, Val: v.Val.(int)}, a}
+				return c.Eval()
 			}
-
-			switch v {
-			case "+":
-				val, err := c.Cdr.(*Cons).evalAdd()
-				if err != nil {
-					return "", err
-				}
-				return strconv.Itoa(val), nil
-			case "-":
-				val, err := c.Cdr.(*Cons).evalSub()
-				if err != nil {
-					return "", err
-				}
-				return strconv.Itoa(val), nil
-			case "*":
-				val, err := c.Cdr.(*Cons).evalMul()
-				if err != nil {
-					return "", err
-				}
-				return strconv.Itoa(val), nil
-			case "/":
-				val, err := c.Cdr.(*Cons).evalDiv()
-				if err != nil {
-					return "", err
-				}
-				return strconv.Itoa(val), nil
-			default:
-				return v, nil
-			}
-		default:
-			return "", errors.New("invalid type of car")
 		}
+	default:
+		return nil, errors.New("invalid type of car")
 	}
 
-	return "", nil
+	return nil, nil
 }
 
-func evalTerm(i interface{}) (int, error) {
-	var val int
+func evalTerm(i interface{}) (*Atom, error) {
+	var val *Atom
+	var err error
 
 	switch c := i.(type) {
 	case *Atom:
-		v, err := c.Eval()
+		val, err = c.Eval()
 		if err != nil {
-			return 0, err
-		}
-		val, err = strconv.Atoi(v)
-		if err != nil {
-			return 0, err
+			return nil, err
 		}
 	case *Cons:
-		v, err := c.Eval()
+		val, err = c.Eval()
 		if err != nil {
-			return 0, err
-		}
-		val, err = strconv.Atoi(v)
-		if err != nil {
-			return 0, err
+			return nil, err
 		}
 	}
 
 	return val, nil
 }
 
-func (c *Cons) evalAdd() (int, error) {
-	ret, err := evalTerm(c.Car)
+func (c *Cons) evalAdd() (*Atom, error) {
+	r, err := evalTerm(c.Car)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
+	ret := r.Val.(int)
 	for c.Cdr != &Nil {
 		add, err := evalTerm(c.Cdr)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
-		ret += add
+		ret += add.Val.(int)
 		c = c.Cdr.(*Cons)
 	}
 
-	return ret, nil
+	return &Atom{Kind: TypeNum, Val: ret}, nil
 }
 
-func (c *Cons) evalSub() (int, error) {
-	ret, err := evalTerm(c.Car)
+func (c *Cons) evalSub() (*Atom, error) {
+	r, err := evalTerm(c.Car)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
+	ret := r.Val.(int)
 	for c.Cdr != &Nil {
 		sub, err := evalTerm(c.Cdr)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
-		ret -= sub
+		ret -= sub.Val.(int)
 		c = c.Cdr.(*Cons)
 	}
 
-	return ret, nil
+	return &Atom{Kind: TypeNum, Val: ret}, nil
 }
 
-func (c *Cons) evalMul() (int, error) {
-	ret, err := evalTerm(c.Car)
+func (c *Cons) evalMul() (*Atom, error) {
+	r, err := evalTerm(c.Car)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
+	ret := r.Val.(int)
 	for c.Cdr != &Nil {
 		mul, err := evalTerm(c.Cdr)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
-		ret *= mul
+		ret *= mul.Val.(int)
 		c = c.Cdr.(*Cons)
 	}
 
-	return ret, nil
+	return &Atom{Kind: TypeNum, Val: ret}, nil
 }
 
-func (c *Cons) evalDiv() (int, error) {
-	ret, err := evalTerm(c.Car)
+func (c *Cons) evalDiv() (*Atom, error) {
+	r, err := evalTerm(c.Car)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
+	ret := r.Val.(int)
 	for c.Cdr != &Nil {
 		div, err := evalTerm(c.Cdr)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
-		if div == 0 {
-			return 0, errors.New("could not divide by zero")
+		if div.Val.(int) == 0 {
+			return nil, errors.New("could not divide by zero")
 		}
 
-		ret /= div
+		ret /= div.Val.(int)
 		c = c.Cdr.(*Cons)
 	}
 
-	return ret, nil
+	return &Atom{Kind: TypeNum, Val: ret}, nil
 }
 
-func (a *Atom) Eval() (string, error) {
+func (a *Atom) Eval() (*Atom, error) {
 	if a == &Nil {
-		return "", nil
+		return nil, nil
 	}
 
 	if a.Kind == TypeNum {
-		return strconv.Itoa(a.Val.(int)), nil
+		return a, nil
 	}
 	if a.Kind == TypeOp {
-		return a.Val.(string), nil
+		return a, nil
 	}
 
-	return "", nil
+	return nil, nil
 }
 
 // TODO: Print
+
+func (a *Atom) String() string {
+	switch a := a.Val.(type) {
+	case string:
+		return fmt.Sprintf(a)
+	case int:
+		return fmt.Sprintf("%d", a)
+	}
+
+	return ""
+}
 
 // Loop
 
@@ -423,7 +436,7 @@ func loop() {
 			continue
 		}
 
-		// debugCons(expr)
+		debugCons(expr)
 
 		out, err := expr.Eval()
 		if err != nil {

@@ -141,6 +141,7 @@ const (
 	TypeNil AtomType = iota
 	TypeNum
 	TypeOp
+	TypeCons
 )
 
 type Atom struct {
@@ -223,185 +224,197 @@ func (c *Cons) Eval() (*Atom, error) {
 		return nil, nil
 	}
 
-	switch car := c.Car.(type) {
-	case *Cons:
-		if v, err := car.Eval(); err != nil {
-			return nil, err
-		} else if c.Cdr == &Nil {
-			return v, nil
-		} else {
-			return c.Cdr.(*Cons).Eval()
+	if c.Cdr == &Nil {
+		switch car := c.Car.(type) {
+		case *Cons: // Cons{Cons, Nil}
+			return car.Eval()
+		case *Atom: // Cons{Atom, Nil}
+			return car.Eval()
+		default:
+			return nil, errors.New("invalid type of car")
 		}
-	case *Atom:
-		if v, err := car.Eval(); err != nil {
-			return nil, err
-		} else if cdr, ok := c.Cdr.(*Atom); ok {
-			if cdr == &Nil {
+	} else {
+		switch car := c.Car.(type) {
+		case *Cons: // Cons{Cons, Cons}
+			// FIXME
+			if v, err := car.Eval(); err != nil {
+				return nil, err
+			} else if c.Cdr == &Nil {
 				return v, nil
 			} else {
-				// TODO: Cons{Atom,Atom} and right Atom is not Nil
+				return c.Cdr.(*Cons).Eval()
 			}
-		} else {
+		case *Atom: // Cons{Atom, _}
+			v, err := car.Eval()
+			if err != nil {
+				return nil, err
+			}
+
 			if str, ok := v.Val.(string); ok {
 				switch str {
-				case "+":
-					val, err := c.Cdr.(*Cons).evalAdd()
-					if err != nil {
-						return nil, err
-					}
-					return val, nil
-				case "-":
-					val, err := c.Cdr.(*Cons).evalSub()
-					if err != nil {
-						return nil, err
-					}
-					return val, nil
-				case "*":
-					val, err := c.Cdr.(*Cons).evalMul()
-					if err != nil {
-						return nil, err
-					}
-					return val, nil
-				case "/":
-					val, err := c.Cdr.(*Cons).evalDiv()
-					if err != nil {
-						return nil, err
-					}
-					return val, nil
+				case "+", "-", "*", "/":
+					return c.Cdr.(*Cons).Execute(str)
+				default:
+					return nil, errors.New("invalid type of car")
 				}
 			} else {
-				var a *Atom
 				if cdr, ok := c.Cdr.(*Cons); ok {
-					a, err = cdr.Eval()
-					if err != nil {
-						return nil, err
-					}
+					return cdr.Eval()
 				} else {
 					return nil, errors.New("should be handle another way")
 				}
-				c := &Cons{&Atom{Kind: TypeNum, Val: v.Val.(int)}, a}
-				return c.Eval()
 			}
+		default:
+			return nil, errors.New("invalid type of car")
 		}
-	default:
-		return nil, errors.New("invalid type of car")
 	}
 
 	return nil, nil
 }
 
-func evalTerm(i interface{}) (*Atom, error) {
-	var val *Atom
-	var err error
-
-	switch c := i.(type) {
-	case *Atom:
-		val, err = c.Eval()
-		if err != nil {
-			return nil, err
-		}
-	case *Cons:
-		val, err = c.Eval()
-		if err != nil {
-			return nil, err
-		}
+func (c *Cons) Execute(op string) (*Atom, error) {
+	switch op {
+	case "+":
+		return c.evalAdd()
+	case "-":
+		return c.evalSub()
+	case "*":
+		return c.evalMul()
+	case "/":
+		return c.evalDiv()
 	}
 
-	return val, nil
+	return nil, errors.New("unexpected operator string")
+}
+
+func evalTerm(i interface{}) (*Atom, error) {
+	switch c := i.(type) {
+	case *Atom:
+		return c.Eval()
+	case *Cons:
+		// FIXME
+		return c.Eval()
+	}
+
+	return nil, errors.New("invalid type of argument")
 }
 
 func (c *Cons) evalAdd() (*Atom, error) {
-	r, err := evalTerm(c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := r.Val.(int)
+	var rhs int
 	for c.Cdr != &Nil {
-		add, err := evalTerm(c.Cdr)
+		temp, err := evalTerm(c.Cdr)
 		if err != nil {
 			return nil, err
 		}
-		ret += add.Val.(int)
+
+		if temp == &Nil || temp == nil {
+			break
+		} else if t, ok := temp.Val.(int); ok {
+			rhs += t
+		} else {
+			return nil, errors.New("unexpected value")
+		}
+
 		c = c.Cdr.(*Cons)
 	}
 
-	return &Atom{Kind: TypeNum, Val: ret}, nil
+	return &Atom{Kind: TypeNum, Val: lhs.Val.(int) + rhs}, nil
 }
 
 func (c *Cons) evalSub() (*Atom, error) {
-	r, err := evalTerm(c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := r.Val.(int)
+	var rhs int
 	for c.Cdr != &Nil {
-		sub, err := evalTerm(c.Cdr)
+		temp, err := evalTerm(c.Cdr)
 		if err != nil {
 			return nil, err
 		}
-		ret -= sub.Val.(int)
+
+		if temp == &Nil || temp == nil {
+			break
+		} else if t, ok := temp.Val.(int); ok {
+			rhs -= t
+		} else {
+			return nil, errors.New("unexpected value")
+		}
+
 		c = c.Cdr.(*Cons)
 	}
 
-	return &Atom{Kind: TypeNum, Val: ret}, nil
+	return &Atom{Kind: TypeNum, Val: lhs.Val.(int) - rhs}, nil
 }
 
 func (c *Cons) evalMul() (*Atom, error) {
-	r, err := evalTerm(c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := r.Val.(int)
+	var rhs int
 	for c.Cdr != &Nil {
-		mul, err := evalTerm(c.Cdr)
+		temp, err := evalTerm(c.Cdr)
 		if err != nil {
 			return nil, err
 		}
-		ret *= mul.Val.(int)
+
+		if temp == &Nil || temp == nil {
+			break
+		} else if t, ok := temp.Val.(int); ok {
+			rhs *= t
+		} else {
+			return nil, errors.New("unexpected value")
+		}
+
 		c = c.Cdr.(*Cons)
 	}
 
-	return &Atom{Kind: TypeNum, Val: ret}, nil
+	return &Atom{Kind: TypeNum, Val: lhs.Val.(int) * rhs}, nil
 }
 
 func (c *Cons) evalDiv() (*Atom, error) {
-	r, err := evalTerm(c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	ret := r.Val.(int)
+	var rhs int
 	for c.Cdr != &Nil {
-		div, err := evalTerm(c.Cdr)
+		temp, err := evalTerm(c.Cdr)
 		if err != nil {
 			return nil, err
 		}
-		if div.Val.(int) == 0 {
-			return nil, errors.New("could not divide by zero")
+
+		if temp == &Nil || temp == nil {
+			break
+		} else if t, ok := temp.Val.(int); ok {
+			if t == 0 {
+				return nil, errors.New("should not divide by zero")
+			} else {
+				rhs /= t
+			}
+		} else {
+			return nil, errors.New("unexpected value")
 		}
 
-		ret /= div.Val.(int)
 		c = c.Cdr.(*Cons)
 	}
 
-	return &Atom{Kind: TypeNum, Val: ret}, nil
+	return &Atom{Kind: TypeNum, Val: lhs.Val.(int) / rhs}, nil
 }
 
 func (a *Atom) Eval() (*Atom, error) {
-	if a == &Nil {
-		return nil, nil
-	}
-
-	if a.Kind == TypeNum {
+	if a != &Nil {
 		return a, nil
 	}
-	if a.Kind == TypeOp {
-		return a, nil
-	}
-
 	return nil, nil
 }
 

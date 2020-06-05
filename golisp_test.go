@@ -5,35 +5,17 @@ import (
 	"testing"
 )
 
-func TestRead(t *testing.T) {
-	testcases := []struct {
-		input    string
-		expected *Cons
-	}{
-		{"", nil},
-	}
-
-	for _, tt := range testcases {
-		actual, err := Read(tt.input)
-		if err != nil {
-			t.Fatalf("unexpected err: %v\n", err)
-		}
-
-		if !reflect.DeepEqual(tt.expected, actual) {
-			t.Fatalf("expected %#v but got %#v\n", tt.expected, actual)
-		}
-	}
-}
-
 func TestEval(t *testing.T) {
 	testcases := []struct {
 		input    string
-		expected string
+		expected *Atom
 	}{
-		{"", ""},
-		{"(+ 1 1)", "2"},
-		{"(+ 2 (* 3 4))", "14"},
-		{"(- 8 (/ 6 (+ 1 1)))", "5"},
+		{"", nil},
+		{"(+ 1 2)", &Atom{Kind: TypeNum, Val: 3}},
+		{"(+ 1 2 3)", &Atom{Kind: TypeNum, Val: 6}},
+		{"(+ 1 2 (+ 3 4))", &Atom{Kind: TypeNum, Val: 10}},
+		{"(+ 1 (+ 2 3 4) 5)", &Atom{Kind: TypeNum, Val: 15}},
+		{"(+ (+ 1 2 3) 4 5)", &Atom{Kind: TypeNum, Val: 15}},
 	}
 
 	for _, tt := range testcases {

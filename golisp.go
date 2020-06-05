@@ -212,34 +212,38 @@ func debugAtom(atom *Atom) {
 // Eval
 
 func (c *Cons) Eval() (*Atom, error) {
-	switch car := c.Car.(type) {
-	case *Cons:
-		if v, err := car.Eval(); err != nil {
-			return nil, err
-		} else if c.Cdr == nil {
-			return v, nil
-		} else {
-			return c.Cdr.(*Cons).Eval()
-		}
-	case *Atom:
-		if v, err := car.Eval(); err != nil {
-			return nil, err
-		} else if c.Cdr == nil {
-			return v, nil
-		} else {
-			if str, ok := v.Val.(string); ok {
-				switch str {
-				case "+":
-					return c.Cdr.(*Cons).Execute(str)
-				default:
-					return nil, errors.New("invalid string")
-				}
+	if c == nil {
+		return nil, nil
+	} else {
+		switch car := c.Car.(type) {
+		case *Cons:
+			if v, err := car.Eval(); err != nil {
+				return nil, err
+			} else if c.Cdr == nil {
+				return v, nil
 			} else {
 				return c.Cdr.(*Cons).Eval()
 			}
+		case *Atom:
+			if v, err := car.Eval(); err != nil {
+				return nil, err
+			} else if c.Cdr == nil {
+				return v, nil
+			} else {
+				if str, ok := v.Val.(string); ok {
+					switch str {
+					case "+":
+						return c.Cdr.(*Cons).Execute(str)
+					default:
+						return nil, errors.New("invalid string")
+					}
+				} else {
+					return c.Cdr.(*Cons).Eval()
+				}
+			}
+		default:
+			return nil, errors.New("invalid type of car")
 		}
-	default:
-		return nil, errors.New("invalid type of car")
 	}
 }
 
@@ -285,9 +289,13 @@ func evalTerm(op string, i interface{}) (*Atom, error) {
 					return nil, err
 				}
 			} else {
-				lhs, err = evalTerm(op, c.Car)
-				if err != nil {
-					return nil, err
+				if _, ok := c.Car.(*Atom).Val.(string); ok {
+					return c.Eval()
+				} else {
+					lhs, err = evalTerm(op, c.Car)
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
 
@@ -348,7 +356,7 @@ func loop() {
 			continue
 		}
 
-		debugCons(expr)
+		// debugCons(expr)
 
 		out, err := expr.Eval()
 		if err != nil {

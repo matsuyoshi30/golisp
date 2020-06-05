@@ -262,84 +262,101 @@ func (c *Cons) Execute(op string) (*Atom, error) {
 }
 
 func (c *Cons) evalAdd() (*Atom, error) {
-	lhs, err := evalTerm("+", c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	rhs, err := evalTerm("+", c.Cdr)
+	rhs, err := evalTerm(c.Cdr)
 	if err != nil {
 		return nil, err
 	}
 
-	if rv, ok := rhs.Val.(int); ok {
-		return &Atom{Kind: TypeNum, Val: lhs.Val.(int) + rv}, nil
+	val := lhs[0].Val.(int)
+	for _, r := range rhs {
+		if rv, ok := r.Val.(int); ok {
+			val += rv
+		}
 	}
 
-	return nil, errors.New("should not reach")
+	return &Atom{Kind: TypeNum, Val: val}, nil
 }
 
 func (c *Cons) evalSub() (*Atom, error) {
-	lhs, err := evalTerm("-", c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	rhs, err := evalTerm("-", c.Cdr)
+	rhs, err := evalTerm(c.Cdr)
 	if err != nil {
 		return nil, err
 	}
 
-	if rv, ok := rhs.Val.(int); ok {
-		return &Atom{Kind: TypeNum, Val: lhs.Val.(int) - rv}, nil
+	val := lhs[0].Val.(int)
+	for _, r := range rhs {
+		if rv, ok := r.Val.(int); ok {
+			val -= rv
+		}
 	}
 
-	return nil, errors.New("should not reach")
+	return &Atom{Kind: TypeNum, Val: val}, nil
 }
 
 func (c *Cons) evalMul() (*Atom, error) {
-	lhs, err := evalTerm("*", c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	rhs, err := evalTerm("*", c.Cdr)
+	rhs, err := evalTerm(c.Cdr)
 	if err != nil {
 		return nil, err
 	}
 
-	if rv, ok := rhs.Val.(int); ok {
-		return &Atom{Kind: TypeNum, Val: lhs.Val.(int) * rv}, nil
+	val := lhs[0].Val.(int)
+	for _, r := range rhs {
+		if rv, ok := r.Val.(int); ok {
+			val *= rv
+		}
 	}
 
-	return nil, errors.New("should not reach")
+	return &Atom{Kind: TypeNum, Val: val}, nil
 }
 
 func (c *Cons) evalDiv() (*Atom, error) {
-	lhs, err := evalTerm("/", c.Car)
+	lhs, err := evalTerm(c.Car)
 	if err != nil {
 		return nil, err
 	}
 
-	rhs, err := evalTerm("/", c.Cdr)
+	rhs, err := evalTerm(c.Cdr)
 	if err != nil {
 		return nil, err
 	}
 
-	if rv, ok := rhs.Val.(int); ok {
-		if rv == 0 {
-			return nil, errors.New("should not divide by zero")
+	val := lhs[0].Val.(int)
+	for _, r := range rhs {
+		if rv, ok := r.Val.(int); ok {
+			if rv == 0 {
+				return nil, errors.New("should not divide by zero")
+			}
+			val /= rv
 		}
-		return &Atom{Kind: TypeNum, Val: lhs.Val.(int) / rv}, nil
 	}
 
-	return nil, errors.New("should not reach")
+	return &Atom{Kind: TypeNum, Val: val}, nil
 }
 
-func evalTerm(op string, i interface{}) (*Atom, error) {
+func evalTerm(i interface{}) ([]*Atom, error) {
+	ret := make([]*Atom, 0)
 	switch c := i.(type) {
 	case *Atom:
-		return c.Eval()
+		v, err := c.Eval()
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, v)
 	case *Cons:
 		var lhs, rhs *Atom
 		var err error
@@ -350,78 +367,45 @@ func evalTerm(op string, i interface{}) (*Atom, error) {
 			}
 		} else {
 			if _, ok := c.Car.(*Atom).Val.(string); ok {
-				return c.Eval()
-			} else {
-				lhs, err = evalTerm(op, c.Car)
+				v, err := c.Eval()
 				if err != nil {
 					return nil, err
 				}
+				ret = append(ret, v)
+			} else {
+				l, err := evalTerm(c.Car)
+				if err != nil {
+					return nil, err
+				}
+				lhs = l[0]
 			}
+		}
+		if lhs != nil {
+			ret = append(ret, &Atom{Kind: TypeNum, Val: lhs.Val.(int)})
 		}
 
 		if c.Cdr == nil {
-			return &Atom{Kind: TypeNum, Val: lhs.Val.(int)}, nil
+			return ret, nil
 		}
 
-		switch op {
-		case "+":
-			if cdr, ok := c.Cdr.(*Cons); ok {
-				rhs, err = cdr.Eval()
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				rhs, err = evalTerm(op, c.Cdr)
-				if err != nil {
-					return nil, err
-				}
+		if cdr, ok := c.Cdr.(*Cons); ok {
+			rhs, err = cdr.Eval()
+			if err != nil {
+				return nil, err
 			}
-			return &Atom{Kind: TypeNum, Val: lhs.Val.(int) + rhs.Val.(int)}, nil
-		case "-":
-			if cdr, ok := c.Cdr.(*Cons); ok {
-				rhs, err = cdr.Eval()
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				rhs, err = evalTerm(op, c.Cdr)
-				if err != nil {
-					return nil, err
-				}
+		} else {
+			r, err := evalTerm(c.Cdr)
+			if err != nil {
+				return nil, err
 			}
-			return &Atom{Kind: TypeNum, Val: lhs.Val.(int) - rhs.Val.(int)}, nil
-		case "*":
-			if cdr, ok := c.Cdr.(*Cons); ok {
-				rhs, err = cdr.Eval()
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				rhs, err = evalTerm(op, c.Cdr)
-				if err != nil {
-					return nil, err
-				}
+			if r == nil {
+				return ret, nil
 			}
-			return &Atom{Kind: TypeNum, Val: lhs.Val.(int) * rhs.Val.(int)}, nil
-		case "/":
-			if cdr, ok := c.Cdr.(*Cons); ok {
-				rhs, err = cdr.Eval()
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				rhs, err = evalTerm(op, c.Cdr)
-				if err != nil {
-					return nil, err
-				}
-			}
-			if rhs.Val.(int) == 0 {
-				return nil, errors.New("should not divide by zero")
-			}
-			return &Atom{Kind: TypeNum, Val: lhs.Val.(int) / rhs.Val.(int)}, nil
 		}
+		ret = append(ret, &Atom{Kind: TypeNum, Val: rhs.Val.(int)})
 	}
-	return nil, errors.New("invalid type of argument")
+
+	return ret, nil
 }
 
 func (a *Atom) Eval() (*Atom, error) {
